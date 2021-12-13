@@ -57,7 +57,7 @@ Object obj = ctor.newInstance();
 
 ##### 4. 初始化
 
-<img src="images/image-20211211203210186.png" alt="image-20211211203210186" style="zoom:80%;" />
+<img src="images/image-20211211203210186.png" alt="image-20211211203210186" style="zoom:66%;" />
 
 之后这一步就是初始化Bean，去给这些对象的属性赋值，然后完成Bean对象的创建。
 
@@ -67,3 +67,73 @@ Object obj = ctor.newInstance();
 
 - **StandardEnvironment**: 为了方便我们的使用，Spring在创建IOC容器的时候会将系统的相关属性加载到StandardEnvironment对象中，方便后续使用。
 - **观察者模式**：如果我们需要监控Bean创建的过程 需要提前建立监听器和监听事件，这个就是观察者模式
+
+## 2. 源码分析
+
+### 1. Abstractapplication
+
+我们Spring的启动类例如我们常用的ClassPathXmlApplicationContext都会继承Abstractapplication类，去继承他的refresh()方法，这个方法里有13个方法，就是初始化Spring的全部过程，下面我们会把13个方法一一介绍。
+
+![image-20211212170517026](images/image-20211212170517026.png)
+
+#### 1. prepareRefresh()
+
+- 设置启动时间
+- 更改Spring一些自带的状态标志位，active=true，closed=false
+- 初始化环境变量StandardEnvironment
+- 初始化一些Set集合
+
+#### 2. obtainFreshBeanFactory()
+
+- 判断是否有旧的BeanFactory，如果有就destroy，如果没有就createBeanFactory()
+- customizeBeanFactory(beanFactory)： 个性化我们上一步创建的beanFactory()
+- loadBeanDefinitions(beanFactory): 把配置文件里面的数据读取出来，然后BeanDefinitionReader把这些配置信息一个一个的读取出来然后封装成beanDefinition对象，然后加载到我们的beanFactory里面，具体实现是存放在beanDefinitionMap和beanDefinitionName里面。
+
+![image-20211212173747113](images/image-20211212173747113.png)
+
+#### 3. prepareBeanFactory(beanFactory)
+
+- 我们刚才获得的beanFactory中很多属性都是null的，所以这一步是给beanFactory中的属性进行一个赋值操作。
+
+#### 4. postProcessBeanFactory(beanFactory)
+
+![image-20211211200304457](images/image-20211211200304457.png)
+
+#### 5. invokeBeanFactoryPostProcessors(beanFactory)
+
+- 实例化并调用所有注册的BeanFactoryPostProcessor
+
+#### 6. registerBeanPostProcessor(beanFactory)
+
+<img src="images/image-20211211203210186.png" alt="image-20211211203210186" style="zoom:66%;" />
+
+- 注册所有的BeanPostProcessor
+
+#### 7. initMessageSource() [不重要]
+
+- 进行国际化处理，用于语言的处理
+
+#### 8. initApplicationEventMulticaster()
+
+- 创建多播器 服务于 观察者模式所需要的监听事件
+
+#### 9. onRefresh()
+
+
+
+#### 10. registerListeners()
+
+- 注册监听器
+
+#### 11. finishBeanFactoryInitialization(beanFactory)
+
+- **beanFactory.preInstantiateSingletons()**
+
+  在 finishBeanFactoryInitialization这个方法中最重要的部分就是这里，**实例并初始化所有非懒加载的单例对象**。下面我们来介绍这个方法的步骤
+
+  1. **obtainFreshBeanFactory()**：在上面的第二个方法中，我们读取了xml配置文件，然后获得了BeanDefinitionNames和BeanDefinitionMap两个变量。
+  2. 在这个方法中我们会遍历整个BeanDefinitionNames这个List，然后当这个BeanDefinition不是懒加载，不是抽象且是单例的时候，他会先检测BeanFactory里面有没有这个实例化的Bean，如果没有就去使用createBean()去创建实例化这个Bean对象。
+  3. **createBean()**：利用反射的方法去创建对象。获得构造器然后实例化对象。
+  4. **populateBean()**：执行了populateBean方法 把属性和依赖都注入了  
+  5. **initializeBean()**：这里面才进行了**Aware**相关方法，**afterPropertiesSet** 和 **initMethod** 方法的调用。同时在initMethod前后会遍历之前注册的BeanPostProcessor:Before和BeanPostProcessor:After。通过**addSingleton**方法将创建完的对象会被放进**三级缓存**中。当我们需要beanFactory.getBean的时候，运行doGetBean方法就会从三级缓存中根据beanName获得当前对象。
+
