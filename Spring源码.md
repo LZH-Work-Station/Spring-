@@ -137,3 +137,41 @@ Object obj = ctor.newInstance();
   4. **populateBean()**：执行了populateBean方法 把属性和依赖都注入了  
   5. **initializeBean()**：这里面才进行了**Aware**相关方法，**afterPropertiesSet** 和 **initMethod** 方法的调用。同时在initMethod前后会遍历之前注册的BeanPostProcessor:Before和BeanPostProcessor:After。通过**addSingleton**方法将创建完的对象会被放进**三级缓存**中。当我们需要beanFactory.getBean的时候，运行doGetBean方法就会从三级缓存中根据beanName获得当前对象。
 
+## Spring中的一些具体实现
+
+### Autowired的自己实现
+
+我们想要在UserController中注入一个UserService对象，平时我们采用的Autowired，这次我们用代码来进行实现Autowired
+
+- 创建一个叫AutoWired的注解(不是我们常用的@Autowired), 这样就定义了一个AutoWired注解
+
+```java
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.FIELD) // 这个字段是放在field上面的
+public @interface AutoWired{}
+```
+
+- 实现Autowired功能
+
+```java
+// 这是我们的controller对象
+UserController user = new UserController();
+Class<?extends UserController> clazz = userController.getClass();
+
+// 获取创建controller对象所需要的全部属性名
+Stream.of(clazz.getDeclaredFields()).forEach(field -> {
+    String name = field.getName();
+    // 检测这个field上面有没有AutoWired注解
+    AutoWired annotation = field.getAnnotation(AutoWired.class);
+    if(annotation != null){
+        field.setAccessiable(true);
+        // 获取属性的类型
+        Class<?> type = field.getType();
+        // 创建对象
+        Object obj = type.newInstance();
+        // 往controller对象里面set我们创建的userService 完成自动注入
+        field.set(userController, obj);
+    }
+})
+```
+
