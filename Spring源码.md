@@ -6,7 +6,7 @@
 
 #### 定义
 
-原来我们使用java对象需要自己创建，但是现在是Spring容器帮我们创建，当我们需要的时候就从Spring的IOC容器内拿就可以了。
+原来我们使用java对象需要自己创建，但是现在是Spring容器帮我们创建，当我们需要的时候就从Spring的IOC容器内拿就可以了。IOC的核心就是通过反射创建对象，然后操作对象。
 
 #### 数据结构
 
@@ -18,9 +18,11 @@ IOC容器本质上就是一个Map结构，Spring创建的所有对象都会按�
 
 ##### 1. 读取配置文件  
 
-在早期开发的时候，我们通过编辑xml配置文件，将对象的属性，是否单例，Bean的name的信息写在xml配置文件中作为要创建的Bean的定义信息。然后IOC容器有一个BeanDefinitionReader然后按照既定的规则去读取xml文件，并创建Bean的定义信息（在源码中定义出BeanDefinition对象）
+在早期开发的时候，我们通过编辑xml配置文件，将对象的属性，是否单例，Bean的name的信息写在xml配置文件中作为要创建的Bean的定义信息。然后IOC容器有一个BeanDefinitionReader然后按照既定的规则去读取xml文件，将读取的信息封装成一个**Document**对象，然后根据
 
-- **BeanDefiition**: BeanDefinition是一个接口 描述一个bean实例，并拥有他的属性信息，构造方法的参数等信息用来创建Bean
+Document对象创建Bean的定义信息（在源码中定义出BeanDefinition对象）
+
+- **BeanDefinition**: BeanDefinition是一个接口 描述一个bean实例，并拥有他的属性信息，构造方法的参数等信息用来创建Bean
 - **BeanDefinitionReader**：BeanDefinitionReader也是一个接口，用来读取配置文件(例如：xml，json，priperties等)。每一种配置文件都拥有他对应的实现这个接口的对象用来读取对应的配置文件来创建BeanDefinition。如果我们使用xml配置文件 就指定一个xml文件的BeanDefinitionReader来读取配置文件
 
 ##### 2. 实例化
@@ -29,9 +31,13 @@ IOC容器本质上就是一个Map结构，Spring创建的所有对象都会按�
 
 > 这里我们区分一下实例化和初始化：
 >
-> **实例化**：在堆中创建一个空间用于实例化对象，所有的属性都是默认值
+> **实例化**：在堆中创建一个空间用于实例化对象，所有的属性都是默认值，例如int就是0，String就是null
 >
-> **初始化**：1. 给对象的属性赋值    2. 执行Bean的init方法
+> **初始化**：1. 给对象的属性赋值    2. 如果类中定义了init方法就会执行Bean的init方法(没有定义的话就啥都不做)。例如：init方法里log.info(创建Bean对象)，然后Spring容器初始化这个Bean的时候就会执行这个init方法打出日志。当然我们也可以定义一些别的内容再init里面，这个Bean对象就会执行这个命令。、
+
+###### 反射的优势
+
+反射的优势在于可以获得类的全部信息，例如属性，方法，构造器等。最重要也最常用的是我们可以获得类的注解，然后根据注解去做下一步操作。例如 某个类的一个属性上面有Autowired，我们就会根据这个Autowired注解去先生成对应的Bean，然后再注入到这个属性中，并之后反射创建这个类的对象。
 
 ###### BeanFactory反射的过程
 
@@ -53,7 +59,17 @@ Object obj = ctor.newInstance();
 
 ![image-20211211200304457](images/image-20211211200304457.png)
 
-- **BeanFacoryPostProcessor**: 这里的BeanFactoryPostProcessor可以对 BeanDefinition信息进行一个预处理。例如我们在xml配置文件中，如果有一些${jdbc.username}类似这种需要读取另一个yaml配置文件而获得的信息，就可以在这些BeanFactoryPostProcessor中进行一个BeanDefinition的预处理。
+- **BeanFacoryPostProcessor**: 这里的BeanFactoryPostProcessor可以对 BeanDefinition信息进行一个预处理。例如我们在xml配置文件中，如果有一些${jdbc.username}类似这种需要读取另一个yaml配置文件而获得的信息，再例如我们需要给某些BeanDefinition设置新的scope或者新的依赖等等。
+
+  
+
+  总的来说，BeanFactoryPostProcessor的目的就是让我们在程序运行的过程中动态的更改或者叫加强我们的BeanFactory中的BeanDefinition信息，在这些BeanFactoryPostProcessor中进行一个BeanDefinition的预处理。
+
+###### 应用
+
+如果我们要新添加一个自定义的BeanFactoryPostProcessor只需要创建一个类，实现BeanFactoryPostProcessor然后把他注入到IOC容器(通过配置文件或者注解的方式)，Spring的BeanFactory初始化的时候就会去执行你自定义的BeanFactoryPostProcessor。
+
+![image-20211221001006373](images/image-20211221001006373.png)
 
 ##### 4. 初始化
 
@@ -137,6 +153,91 @@ Object obj = ctor.newInstance();
   4. **populateBean()**：执行了populateBean方法 把属性和依赖都注入了  
   5. **initializeBean()**：这里面才进行了**Aware**相关方法，**afterPropertiesSet** 和 **initMethod** 方法的调用。同时在initMethod前后会遍历之前注册的BeanPostProcessor:Before和BeanPostProcessor:After。通过**addSingleton**方法将创建完的对象会被放进**三级缓存**中。当我们需要beanFactory.getBean的时候，运行doGetBean方法就会从三级缓存中根据beanName获得当前对象。
 
+### 2. FactoryBean和BeanFactory的区别
+
+这点其实是大家最关心或者说最困惑的地方，其实从最简单的字面上来看，BeanFactory是个用来创建Bean的Factory（BeanFactory是bean工厂的顶层接口），它的作用是用来创建Bean的，总之一句话，它是个Factory，一个用来创建Bean的Factory。
+
+而FactoryBean是个Bean，就是一个普普通通简简单单的Bean，只是Spring中所有的Bean都实现了这个Bean或者间接实现了这个Bean。也是一句话，FactoryBean就是一个Bean。
+
+**BeanFactory创建出来的每个Bean都是FactoryBean！！！！！！最最简单经典的解释**。
+
+```java
+public interface FactoryBean<T> {
+
+    //返回的对象实例
+    T getObject() throws Exception;
+    //Bean的类型
+    Class<?> getObjectType();
+    //true是单例，false是非单例  在Spring5.0中此方法利用了JDK1.8的新特性变成了default方法，返回true
+    boolean isSingleton();
+}
+```
+
+#### FactoryBean存在的意义
+
+既然我们说FactoryBean就是一个Bean那我们为啥必须要，下面例子中我们可以看到car中有很多变量，我们只需要在getObject()方法中传一个字符串然后split出来就可以把car的所有属性都获取，大大简便了配置文件的复杂度，也方便了我们开发。不然我们就需要配置Brand，MaxSpeed，Price这些property，不像现在只需要配置一个CarInfo。
+
+```xml
+<bean name = "car" class="springtest.factorybean.CarFactoryBean">
+    <property name="carInfo" value="超级跑车,400,2000000" />
+</bean>
+```
+
+```java
+public class CarFactoryBean implements FactoryBean<Car> {
+    private String carInfo;
+
+    @Override
+    public Car getObject() throws Exception {
+        Car car = new Car();
+        String[] infos = carInfo.split(",");
+        car.setBrand(infos[0]);
+        car.setMaxSpeed(Integer.valueOf(infos[1]));
+        car.setPrice(Double.parseDouble(infos[2]));
+        return car;
+    }
+    @Override
+    public Class<?> getObjectType() {
+        return Car.class;
+    }
+    @Override
+    public boolean isSingleton() {
+        return false;
+    }
+    public String getCarInfo() {
+        return this.carInfo;
+    }
+
+    public void setCarInfo(String carInfo) {
+        this.carInfo = carInfo;
+    }
+}
+
+<bean name = "car" class="springtest.factorybean.CarFactoryBean">
+    <property name="carInfo" value="超级跑车,400,2000000" />
+</bean>
+
+public class FactoryBeanTest {
+    public static void main(String[] args) {
+        BeanFactory factory = new ClassPathXmlApplicationContext("applicationContext.xml");
+        Car car = (Car) factory.getBean("car");
+        car.getCarInfos();
+    }
+}
+```
+
+### 3. Aware的作用
+
+如果我们定义的一个Bean对象 需要获得beanFactory，ApplicationContext等内容，需要这个Bean对象实现对应的接口。例如BeanFactoryAware接口，ApplicationContextAware接口等。然后通过重写set方法来使得这个Bean对象获得这些信息。
+
+![img](images/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzQwODc0Mjg1,size_16,color_FFFFFF,t_70.png)
+
+#### 原理
+
+我们定义的red实现aware，是由后置处理器（**BeanPostProcessor：Before**）例如：ApplicationContextAwareProcessor处理的。在初始化这个Bean之后，Spring获取检查这个Bean有没有实现这些Aware接口，如果有就把这个Bean所需要的属性通过实现的set方法，注入进去。
+
+![image-20211222003911588](images/image-20211222003911588.png)
+
 ## Spring中的一些具体实现
 
 ### Autowired的自己实现
@@ -166,7 +267,7 @@ Stream.of(clazz.getDeclaredFields()).forEach(field -> {
     if(annotation != null){
         field.setAccessiable(true);
         // 获取属性的类型
-        Class<?> type = field.getType();
+        Cla ss<?> type = field.getType();
         // 创建对象
         Object obj = type.newInstance();
         // 往controller对象里面set我们创建的userService 完成自动注入
