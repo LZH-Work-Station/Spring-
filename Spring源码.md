@@ -84,7 +84,7 @@ Object obj = ctor.newInstance();
 - **StandardEnvironment**: 为了方便我们的使用，Spring在创建IOC容器的时候会将系统的相关属性加载到StandardEnvironment对象中，方便后续使用。
 - **观察者模式**：如果我们需要监控Bean创建的过程 需要提前建立监听器和监听事件，这个就是观察者模式
 
-## 2. 源码分析
+## 2. 源码分析（接口）
 
 ### 1. Abstractapplication
 
@@ -226,7 +226,11 @@ public class FactoryBeanTest {
 }
 ```
 
-### 3. Aware的作用
+#### FactoryBean的原理
+
+在上面的例子中，Spring在创建的时候IOC容器中并不会创建Car对象，但是会创建一个CarFacctoryBean对象，把他放在IOC容器中。当我们去使用factory.getBean的时候，Spring会从容器内找到这个对象，然后查看是否实现了FactoryBean接口，如果实现了就去调用getObject方法去获取对象。
+
+### 3. Aware接口的作用
 
 如果我们定义的一个Bean对象 需要获得beanFactory，ApplicationContext等内容，需要这个Bean对象实现对应的接口。例如BeanFactoryAware接口，ApplicationContextAware接口等。然后通过重写set方法来使得这个Bean对象获得这些信息。
 
@@ -237,6 +241,15 @@ public class FactoryBeanTest {
 我们定义的red实现aware，是由后置处理器（**BeanPostProcessor：Before**）例如：ApplicationContextAwareProcessor处理的。在初始化这个Bean之后，Spring获取检查这个Bean有没有实现这些Aware接口，如果有就把这个Bean所需要的属性通过实现的set方法，注入进去。
 
 ![image-20211222003911588](images/image-20211222003911588.png)
+
+### 4. Environment接口
+
+其中最重要的是StandardEnvironment，是一个实现Environment接口的类，他会将一些系统变量加载到Spring的容器中。我们可以通过拿到Environment对象然后getProperty获得环境变量。
+
+```java
+Environment environment = SpringContextUtil.getBean(Environment.class);
+value = environment.getProperty("mpggrc.enable-ansi", boolean.class);
+```
 
 ## Spring中的一些具体实现
 
